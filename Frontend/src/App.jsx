@@ -1,76 +1,82 @@
-import { useState, useEffect } from "react";
-import { io } from "socket.io-client";
-
-const socket = io("http://localhost:4000");
+import { useState, useEffect, useRef } from "react";
+import { jwtDecode } from "jwt-decode";
+import socket from "./socket/socket";
+import Login from "./pages/Login";
+import Register from "./pages/Registration";
+import ChatHeader from "./components/ChatHeader";
+import MessageList from "./components/MessageList";
+import MessageInput from "./components/MessageInput";
 
 function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [page, setPage] = useState("login");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const [myId, setMyId] = useState("");
+  const [typingUser, setTypingUser] = useState("");
+  const chatRef = useRef(null);
 
+  // Auth Success Handler
+  const handleAuth = (token) => {
+    localStorage.setItem("token", token);
+    const decoded = jwtDecode(token);
+    setCurrentUser(decoded);
+    socket.auth = { token };
+    socket.connect(); // Manual connect
+    setPage("chat");
+  };
+
+  // Check existing session
   useEffect(() => {
-    socket.on("connect", () => {
-      setMyId(socket.id);
-    });
-
-    socket.on("receiveMessage", (data) => {
-      setMessages((prev) => [...prev, data]);
-    });
-
-    return () => {
-      socket.off("receiveMessage");
-    };
+    const token = localStorage.getItem("token");
+    if (token) {
+      handleAuth(token);
+    }
   }, []);
 
+  useEffect(() => {
+    if (page === "chat") {
+      socket.emit("joinChat");
+
+      const onReceive = (data) => setMessages((prev) => [...prev, data]);
+      const onHistory = (data) => setMessages(data);
+      const onTyping = (user) => setTypingUser(user);
+      const onHideTyping = () => setTypingUser("");
+
+      socket.on("receiveMessage", onReceive);
+      socket.on("chatHistory", onHistory);
+      socket.on("showTyping", onTyping);
+      socket.on("hideTyping", onHideTyping);
+
+      return () => {
+        socket.off("receiveMessage", onReceive);
+        socket.off("chatHistory", onHistory);
+        socket.off("showTyping", onTyping);
+        socket.off("hideTyping", onHideTyping);
+      };
+    }
+  }, [page]);
+
   const sendMessage = () => {
-    if (message.trim() !== "") {
+    if (message.trim()) {
       socket.emit("sendMessage", message);
       setMessage("");
     }
   };
 
+  if (page === "login") return <Login setPage={setPage} onAuthSuccess={handleAuth} />;
+  if (page === "register") return <Register setPage={setPage} onAuthSuccess={handleAuth} />;
+
   return (
-    <div style={{ margin: "40px auto" }}>
-      <h2>Simple Chat App</h2>
-
-      <div
-        style={{
-          padding: "10px",
-        }}
-      >
-        {messages.map((msg, index) => (
-          <div
-            key={index}
-            style={{
-              textAlign: msg.id === myId ? "right" : "left",
-              marginBottom: "10px",
-            }}
-          >
-            <span
-              style={{
-                display: "inline-block",
-                padding: "8px 12px",
-                borderRadius: "12px",
-                backgroundColor: msg.id === myId ? "#DCF8C6" : "#eee",
-              }}
-            >
-              {msg.text}
-              <div style={{ fontSize: "10px" }}>{msg.time}</div>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div style={{  display: "flex" , position: "fixed", bottom: "20px", margin: "0 10%", width: "80%"}}>
-        <input
-          style={{ flex: 1, padding: "8px" }}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+    <div className="h-screen bg-gray-900 flex items-center justify-center">
+      <div className="bg-gray-800 w-125 h-150 rounded-2xl shadow-xl flex flex-col">
+        <ChatHeader username={currentUser?.username} />
+        <MessageList 
+          messages={messages} 
+          currentUserId={currentUser?.userId} 
+          chatRef={chatRef} 
         />
-        <button onClick={sendMessage} style={{ padding: "8px 16px" }}>
-          Send
-        </button>
+        {typingUser && <p className="text-gray-400 text-xs ml-4 mb-2">{typingUser} is typing...</p>}
+        <MessageInput message={message} setMessage={setMessage} sendMessage={sendMessage} socket={socket} />
       </div>
     </div>
   );
