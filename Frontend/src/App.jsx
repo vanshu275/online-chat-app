@@ -10,51 +10,53 @@ import MessageInput from "./components/MessageInput";
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [page, setPage] = useState("login");
-  const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [message, setMessage] = useState("");
   const [typingUser, setTypingUser] = useState("");
   const chatRef = useRef(null);
 
-  // Auth Success Handler
-  const handleAuth = (token) => {
+  // 1. Ye function login/register ke turant baad chalega
+  const handleAuthSuccess = (token) => {
     localStorage.setItem("token", token);
     const decoded = jwtDecode(token);
     setCurrentUser(decoded);
+
+    // Socket connect logic
     socket.auth = { token };
-    socket.connect(); // Manual connect
+    socket.disconnect(); // Purana agar kuch hai toh disconnect
+    socket.connect(); // Fresh connection with new token
     setPage("chat");
   };
 
-  // Check existing session
+  // 2. Refresh handle karne ke liye
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
-      handleAuth(token);
+      handleAuthSuccess(token);
     }
   }, []);
 
+  // 3. Socket Listeners (Only when in chat page)
   useEffect(() => {
-    if (page === "chat") {
+    if (page === "chat" && currentUser) {
       socket.emit("joinChat");
 
-      const onReceive = (data) => setMessages((prev) => [...prev, data]);
-      const onHistory = (data) => setMessages(data);
-      const onTyping = (user) => setTypingUser(user);
-      const onHideTyping = () => setTypingUser("");
+      socket.on("receiveMessage", (data) => {
+        setMessages((prev) => [...prev, data]);
+      });
 
-      socket.on("receiveMessage", onReceive);
-      socket.on("chatHistory", onHistory);
-      socket.on("showTyping", onTyping);
-      socket.on("hideTyping", onHideTyping);
+      socket.on("chatHistory", (data) => setMessages(data));
+      socket.on("showTyping", (user) => setTypingUser(user));
+      socket.on("hideTyping", () => setTypingUser(""));
 
       return () => {
-        socket.off("receiveMessage", onReceive);
-        socket.off("chatHistory", onHistory);
-        socket.off("showTyping", onTyping);
-        socket.off("hideTyping", onHideTyping);
+        socket.off("receiveMessage");
+        socket.off("chatHistory");
+        socket.off("showTyping");
+        socket.off("hideTyping");
       };
     }
-  }, [page]);
+  }, [page, currentUser]);
 
   const sendMessage = () => {
     if (message.trim()) {
@@ -63,23 +65,38 @@ function App() {
     }
   };
 
-  if (page === "login") return <Login setPage={setPage} onAuthSuccess={handleAuth} />;
-  if (page === "register") return <Register setPage={setPage} onAuthSuccess={handleAuth} />;
+  // Auto scroll
+  useEffect(() => {
+    chatRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  if (page === "login")
+    return <Login setPage={setPage} onAuthSuccess={handleAuthSuccess} />;
+  if (page === "register")
+    return <Register setPage={setPage} onAuthSuccess={handleAuthSuccess} />;
 
   return (
     <div className="h-screen bg-gray-900 flex items-center justify-center">
       <div className="bg-gray-800 w-125 h-150 rounded-2xl shadow-xl flex flex-col">
         <ChatHeader username={currentUser?.username} />
-        <MessageList 
-          messages={messages} 
-          currentUserId={currentUser?.userId} 
-          chatRef={chatRef} 
+        <MessageList
+          messages={messages}
+          currentUserId={currentUser?.userId}
+          chatRef={chatRef}
         />
-        {typingUser && <p className="text-gray-400 text-xs ml-4 mb-2">{typingUser} is typing...</p>}
-        <MessageInput message={message} setMessage={setMessage} sendMessage={sendMessage} socket={socket} />
+        {typingUser && (
+          <p className="text-gray-400 text-xs ml-4 mb-2 italic">
+            {typingUser} is typing...
+          </p>
+        )}
+        <MessageInput
+          message={message}
+          setMessage={setMessage}
+          sendMessage={sendMessage}
+          socket={socket}
+        />
       </div>
     </div>
   );
 }
-
 export default App;

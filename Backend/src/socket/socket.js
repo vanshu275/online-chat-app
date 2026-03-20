@@ -47,25 +47,25 @@ export const initSocket = (httpServer) => {
     });
 
     // ... existing imports
-    socket.on("sendMessage", async (message) => {
-      const username = users[socket.id];
-      const userId = socket.user.userId;
+   // Backend sendMessage logic update
+socket.on("sendMessage", async (message) => {
+  const username = socket.user.username; // Direct decoded token se lo
+  const userId = socket.user.userId;
 
-      const newMessage = new Message({
-        user: userId,
-        username: username,
-        message: message,
-      });
+  const newMessage = new Message({
+    user: userId,
+    username: username,
+    message: message,
+  });
 
-      await newMessage.save();
+  await newMessage.save();
 
-      // Sabko bhejo, frontend check kar lega ki 'user' ID matches 'currentUser.userId'
-      io.emit("receiveMessage", {
-        user: userId,
-        username: username,
-        message: message,
-      });
-    });
+  io.emit("receiveMessage", {
+    user: userId,
+    username: username,
+    message: message,
+  });
+});
 
     // 3️⃣ TYPING
     socket.on("typing", () => {
@@ -92,3 +92,8 @@ export const initSocket = (httpServer) => {
     });
   });
 };
+
+
+
+
+

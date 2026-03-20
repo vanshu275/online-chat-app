@@ -1,5 +1,4 @@
 import { useState } from "react";
-import socket from "../socket/socket"
 
 function Register({ setPage }) {
   const [username, setUsername] = useState("");
