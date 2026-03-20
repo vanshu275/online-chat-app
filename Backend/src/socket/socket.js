@@ -37,8 +37,11 @@ export const initSocket = (httpServer) => {
       users[socket.id] = username;
 
       // 🔹 LOAD OLD MESSAGES
-      const oldMessages = await Message.find().sort({ createdAt: 1 }).limit(10);
-      socket.emit("chatHistory", oldMessages);
+     const oldMessages = await Message.find()
+  .sort({ createdAt: -1 })
+  .limit(10);
+
+socket.emit("chatHistory", oldMessages.reverse());
 
       io.emit("receiveMessage", {
         user: "System",
